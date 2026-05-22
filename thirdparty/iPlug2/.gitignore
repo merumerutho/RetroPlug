@@ -29,7 +29,10 @@ _*
 Icon?
 .DS_Stor*
 build-*
-Dependencies/IPlug/VST3_SDK/*
+# VST3 SDK is vendored into the repo (see scripts/vst3sdk.lua); only the
+# example plugins and the usage-guidelines PDF are excluded to keep it lean.
+Dependencies/IPlug/VST3_SDK/public.sdk/samples/
+Dependencies/IPlug/VST3_SDK/VST3_Usage_Guidelines.pdf
 Dependencies/IPlug/VST2_SDK/*
 Dependencies/IPlug/AAX_SDK/*
 Dependencies/IPlug/WAM_AWP/*
