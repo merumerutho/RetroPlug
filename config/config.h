@@ -24,7 +24,10 @@
 #ifdef APP_API
 #define PLUG_CHANNEL_IO "0-2"
 #else
-#define PLUG_CHANNEL_IO "0-8"
+// Four stereo output buses (8 channels total). VST3 needs separate buses, not one
+// 8-channel bus, for a host to show 4 routable stereo outputs. iPlug2 still presents
+// these to ProcessBlock as a flat outputs[0..7] array, so the routing code is unchanged.
+#define PLUG_CHANNEL_IO "0-2.2.2.2"
 #endif
 
 #define PLUG_LATENCY 0

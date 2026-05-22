@@ -2,6 +2,13 @@
 
 #include <spdlog/spdlog.h>
 
+// Each per-system audio buffer is interleaved as a stereo mix (2 floats/frame)
+// followed by the 4 Game Boy channels in stereo (8 floats/frame). Stereo routing
+// modes read the mix region; the TwoChannelsPerChannel mode reads the channels.
+static const size_t AUDIO_MIX_STRIDE = 2;
+static const size_t AUDIO_CHANNEL_STRIDE = GB_CHANNEL_COUNT * 2;
+static const size_t AUDIO_BUFFER_STRIDE = AUDIO_MIX_STRIDE + AUDIO_CHANNEL_STRIDE;
+
 ProcessingContext::ProcessingContext() {
 	_systems.reserve(MAX_SYSTEMS);
 	for (size_t i = 0; i < MAX_SYSTEMS; ++i) {
@@ -75,7 +82,7 @@ SameBoyPlugPtr ProcessingContext::swapSystem(SystemIndex idx, SameBoyPlugPtr ins
 
 		// TODO: Instantiate this in the UI thread and send with the SwapSystem message
 		if (_audioSettings.frameCount > 0) {
-			_audioBuffers[idx].data = std::make_shared<DataBuffer<float>>(_audioSettings.frameCount * 2);
+			_audioBuffers[idx].data = std::make_shared<DataBuffer<float>>(_audioSettings.frameCount * AUDIO_BUFFER_STRIDE);
 			_audioBuffers[idx].frameCount = _audioSettings.frameCount;
 		}
 	} else {
@@ -116,7 +123,7 @@ SameBoyPlugPtr ProcessingContext::removeSystem(SystemIndex idx) {
 			_audioBuffers[i].frameCount = 0;
 		} else {
 			if (_audioSettings.frameCount > 0) {
-				_audioBuffers[idx].data = std::make_shared<DataBuffer<float>>(_audioSettings.frameCount * 2);
+				_audioBuffers[idx].data = std::make_shared<DataBuffer<float>>(_audioSettings.frameCount * AUDIO_BUFFER_STRIDE);
 				_audioBuffers[idx].frameCount = _audioSettings.frameCount;
 			}
 		}
@@ -135,7 +142,7 @@ void ProcessingContext::process(float** outputs, size_t frameCount) {
 
 		for (size_t i = 0; i < MAX_SYSTEMS; ++i) {
 			if (_systems[i]) {
-				_audioBuffers[i].data = std::make_shared<DataBuffer<float>>(frameCount * 2);
+				_audioBuffers[i].data = std::make_shared<DataBuffer<float>>(frameCount * AUDIO_BUFFER_STRIDE);
 				_audioBuffers[i].frameCount = frameCount;
 			}
 		}
@@ -207,12 +214,28 @@ void ProcessingContext::process(float** outputs, size_t frameCount) {
 		_node->push<calls::TransmitVideo>(NodeTypes::Ui, std::move(video));
 	}
 
-	for (size_t i = 0; i < MAX_SYSTEMS; i++) {
-		if (_audioBuffers[i].data) {
-			float* audio = _audioBuffers[i].data->data();
+	if (_settings.audioRouting == AudioChannelRouting::TwoChannelsPerChannel && _audioSettings.channelCount >= AUDIO_CHANNEL_STRIDE) {
+		// Per-channel routing: split system 0 into its 4 Game Boy channels across 8
+		// outputs (Pulse 1 L/R, Pulse 2 L/R, Wave L/R, Noise L/R). Other systems are
+		// silent in this mode. Falls back to the mix routing below if the host has
+		// not connected enough output channels.
+		if (_audioBuffers[0].data) {
+			float* audio = _audioBuffers[0].data->data();
+			const float* channels = audio + _audioSettings.frameCount * AUDIO_MIX_STRIDE;
 			for (size_t j = 0; j < _audioSettings.frameCount; j++) {
-				outputs[i * chanMultipler][j] += audio[j * 2];
-				outputs[i * chanMultipler + 1][j] += audio[j * 2 + 1];
+				for (size_t ch = 0; ch < AUDIO_CHANNEL_STRIDE; ch++) {
+					outputs[ch][j] += channels[j * AUDIO_CHANNEL_STRIDE + ch];
+				}
+			}
+		}
+	} else {
+		for (size_t i = 0; i < MAX_SYSTEMS; i++) {
+			if (_audioBuffers[i].data) {
+				float* audio = _audioBuffers[i].data->data();
+				for (size_t j = 0; j < _audioSettings.frameCount; j++) {
+					outputs[i * chanMultipler][j] += audio[j * AUDIO_MIX_STRIDE];
+					outputs[i * chanMultipler + 1][j] += audio[j * AUDIO_MIX_STRIDE + 1];
+				}
 			}
 		}
 	}

@@ -110,7 +110,8 @@ local function projectMenu(menu)
 		:subMenu("Audio Routing")
 			:multiSelect({
 				"Stereo Mixdown",
-				"Two Channels Per System"
+				"Two Channels Per System",
+				"Two Channels Per Channel"
 			}, settings.audioRouting, function(v)
 				settings.audioRouting = v
 				Project.updateSettings()

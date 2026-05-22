@@ -13,6 +13,8 @@ const size_t PIXEL_HEIGHT = 144;
 const size_t PIXEL_COUNT = (PIXEL_WIDTH * PIXEL_HEIGHT);
 const size_t FRAME_BUFFER_SIZE = (PIXEL_COUNT * 4);
 const size_t AUDIO_SCRATCH_SIZE = 1024 * 8;
+// Game Boy APU channels: Pulse 1, Pulse 2, Wave, Noise. Must match SameBoy's GB_N_CHANNELS.
+const size_t GB_CHANNEL_COUNT = 4;
 
 class SameBoyPlug;
 using SameBoyPlugPtr = std::shared_ptr<SameBoyPlug>;
@@ -59,6 +61,8 @@ struct SameBoyPlugState {
 	GB_gameboy_t* gb = nullptr;
 	char frameBuffer[FRAME_BUFFER_SIZE];
 	GameboySample audioBuffer[AUDIO_SCRATCH_SIZE];
+	// Multichannel routing: per-frame, per-channel samples (Pulse 1/2, Wave, Noise).
+	GameboySample channelBuffer[AUDIO_SCRATCH_SIZE][GB_CHANNEL_COUNT];
 	size_t currentAudioFrames = 0;
 	std::queue<OffsetButton> buttonQueue;
 	std::queue<OffsetByte> serialQueue;

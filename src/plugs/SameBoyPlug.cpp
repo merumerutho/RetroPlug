@@ -89,9 +89,15 @@ static void vblankHandler(GB_gameboy_t* gb, GB_vblank_type_t type) {
 }
 
 static void audioHandler(GB_gameboy_t* gb, GB_sample_t* sample) {
+	static_assert(GB_N_CHANNELS == GB_CHANNEL_COUNT, "GB channel count mismatch with SameBoy");
 	SameBoyPlugState* s = (SameBoyPlugState*)GB_get_user_data(gb);
 	s->audioBuffer[s->currentAudioFrames].left = sample->left;
 	s->audioBuffer[s->currentAudioFrames].right = sample->right;
+
+	// Multichannel routing: capture this frame's 4 per-channel samples. GameboySample
+	// and GB_sample_t are layout-identical (two int16_t), so the cast is safe.
+	GB_apu_get_channel_samples(gb, (GB_sample_t*)s->channelBuffer[s->currentAudioFrames]);
+
 	s->currentAudioFrames++;
 }
 
@@ -405,7 +411,12 @@ void SameBoyPlug::updateAV(int audioFrames) {
 
 	if (sampleCount <= AUDIO_SCRATCH_SIZE) {
 		if (_resetSamples <= 0) {
-			SampleConverter::s16_to_f32(_audioBuffer->data->data(), (int16_t*)_state.audioBuffer, sampleCount);
+			float* data = _audioBuffer->data->data();
+			SampleConverter::s16_to_f32(data, (int16_t*)_state.audioBuffer, sampleCount);
+			// Multichannel routing: the per-channel samples follow the stereo mix in the
+			// same buffer - mix occupies audioFrames*2 floats, then audioFrames*8 floats
+			// of interleaved channels (Pulse 1 L/R, Pulse 2 L/R, Wave L/R, Noise L/R).
+			SampleConverter::s16_to_f32(data + sampleCount, (int16_t*)_state.channelBuffer, audioFrames * (int)GB_CHANNEL_COUNT * 2);
 		} else {
 			_audioBuffer->data->clear();
 			_resetSamples -= audioFrames;
