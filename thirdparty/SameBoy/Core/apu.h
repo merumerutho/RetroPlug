@@ -165,7 +165,14 @@ typedef struct {
     GB_highpass_mode_t highpass_mode;
     double highpass_rate;
     GB_double_sample_t highpass_diff;
-    
+
+    /* Multichannel routing (RetroPlug): per-channel high-pass state and the last
+       rendered, filtered per-channel samples. Additive change to upstream SameBoy
+       for the per-channel audio output feature - re-apply after SameBoy updates.
+       See docs/multichannel-audio.md. */
+    GB_double_sample_t channel_highpass_diff[GB_N_CHANNELS];
+    GB_sample_t channel_samples[GB_N_CHANNELS];
+
     GB_sample_callback_t sample_callback;
     
     double interference_volume;
@@ -185,6 +192,9 @@ void GB_set_sample_rate_by_clocks(GB_gameboy_t *gb, double cycles_per_sample); /
 void GB_set_highpass_filter_mode(GB_gameboy_t *gb, GB_highpass_mode_t mode);
 void GB_set_interference_volume(GB_gameboy_t *gb, double volume);
 void GB_apu_set_sample_callback(GB_gameboy_t *gb, GB_sample_callback_t callback);
+/* Multichannel routing (RetroPlug): copies the last rendered, filtered per-channel
+   samples (in GB_channel_t order) into out. Call from within the sample callback. */
+void GB_apu_get_channel_samples(GB_gameboy_t *gb, GB_sample_t out[GB_N_CHANNELS]);
 int GB_start_audio_recording(GB_gameboy_t *gb, const char *path, GB_audio_format_t format);
 int GB_stop_audio_recording(GB_gameboy_t *gb);
 #ifdef GB_INTERNAL

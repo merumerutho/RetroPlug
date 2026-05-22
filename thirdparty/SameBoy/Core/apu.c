@@ -191,6 +191,8 @@ static signed interference(GB_gameboy_t *gb)
 static void render(GB_gameboy_t *gb)
 {
     GB_sample_t output = {0, 0};
+    /* Multichannel routing (RetroPlug): per-channel pre-filter contributions. */
+    GB_sample_t per_channel[GB_N_CHANNELS] = {{0, 0}};
 
     unrolled for (unsigned i = 0; i < GB_N_CHANNELS; i++) {
         double multiplier = CH_STEP;
@@ -220,12 +222,18 @@ static void render(GB_gameboy_t *gb)
         if (likely(gb->apu_output.last_update[i] == 0)) {
             output.left += gb->apu_output.current_sample[i].left * multiplier;
             output.right += gb->apu_output.current_sample[i].right * multiplier;
+            per_channel[i].left = gb->apu_output.current_sample[i].left * multiplier;
+            per_channel[i].right = gb->apu_output.current_sample[i].right * multiplier;
         }
         else {
             refresh_channel(gb, i, 0);
             output.left += (signed long) gb->apu_output.summed_samples[i].left * multiplier
                             / gb->apu_output.cycles_since_render;
             output.right += (signed long) gb->apu_output.summed_samples[i].right * multiplier
+                            / gb->apu_output.cycles_since_render;
+            per_channel[i].left = (signed long) gb->apu_output.summed_samples[i].left * multiplier
+                            / gb->apu_output.cycles_since_render;
+            per_channel[i].right = (signed long) gb->apu_output.summed_samples[i].right * multiplier
                             / gb->apu_output.cycles_since_render;
             gb->apu_output.summed_samples[i] = (GB_sample_t){0, 0};
         }
@@ -284,6 +292,50 @@ static void render(GB_gameboy_t *gb)
         filtered_output.left = MAX(MIN(filtered_output.left + interference_bias, 0x7FFF), -0x8000);
         filtered_output.right = MAX(MIN(filtered_output.right + interference_bias, 0x7FFF), -0x8000);
     }
+    /* Multichannel routing (RetroPlug): high-pass each channel independently and
+       store the result for GB_apu_get_channel_samples(). The Game Boy high-pass is
+       linear and time-invariant, so in OFF and ACCURATE modes the four channel_samples
+       sum back to filtered_output sample-for-sample. REMOVE_DC_OFFSET uses each
+       channel's own NR51 routing bits, so its per-channel sum may differ from the
+       mix by a small DC term. The mixed-output path above is left untouched. */
+    for (unsigned i = 0; i < GB_N_CHANNELS; i++) {
+        GB_sample_t channel_filtered = gb->apu_output.highpass_mode?
+            (GB_sample_t) {per_channel[i].left  - gb->apu_output.channel_highpass_diff[i].left,
+                           per_channel[i].right - gb->apu_output.channel_highpass_diff[i].right} :
+            per_channel[i];
+
+        switch (gb->apu_output.highpass_mode) {
+            case GB_HIGHPASS_OFF:
+                gb->apu_output.channel_highpass_diff[i] = (GB_double_sample_t) {0, 0};
+                break;
+            case GB_HIGHPASS_ACCURATE:
+                gb->apu_output.channel_highpass_diff[i] = (GB_double_sample_t)
+                    {per_channel[i].left  - channel_filtered.left  * gb->apu_output.highpass_rate,
+                     per_channel[i].right - channel_filtered.right * gb->apu_output.highpass_rate};
+                break;
+            case GB_HIGHPASS_REMOVE_DC_OFFSET: {
+                unsigned mask = gb->io_registers[GB_IO_NR51];
+                double left_volume = 0;
+                double right_volume = 0;
+                if (GB_apu_is_DAC_enabled(gb, i)) {
+                    if (mask & (1 << i)) {
+                        left_volume = ((gb->io_registers[GB_IO_NR50] & 7) + 1) * CH_STEP * 0xF;
+                    }
+                    if (mask & (0x10 << i)) {
+                        right_volume = (((gb->io_registers[GB_IO_NR50] >> 4) & 7) + 1) * CH_STEP * 0xF;
+                    }
+                }
+                gb->apu_output.channel_highpass_diff[i] = (GB_double_sample_t)
+                    {left_volume  * (1 - gb->apu_output.highpass_rate) + gb->apu_output.channel_highpass_diff[i].left  * gb->apu_output.highpass_rate,
+                     right_volume * (1 - gb->apu_output.highpass_rate) + gb->apu_output.channel_highpass_diff[i].right * gb->apu_output.highpass_rate};
+                break;
+            }
+            case GB_HIGHPASS_MAX:;
+        }
+
+        gb->apu_output.channel_samples[i] = channel_filtered;
+    }
+
     assert(gb->apu_output.sample_callback);
     gb->apu_output.sample_callback(gb, &filtered_output);
     if (unlikely(gb->apu_output.output_file)) {
@@ -1563,6 +1615,12 @@ unsigned GB_get_sample_rate(GB_gameboy_t *gb)
 void GB_apu_set_sample_callback(GB_gameboy_t *gb, GB_sample_callback_t callback)
 {
     gb->apu_output.sample_callback = callback;
+}
+
+/* Multichannel routing (RetroPlug): see apu.h and docs/multichannel-audio.md. */
+void GB_apu_get_channel_samples(GB_gameboy_t *gb, GB_sample_t out[GB_N_CHANNELS])
+{
+    memcpy(out, gb->apu_output.channel_samples, sizeof(gb->apu_output.channel_samples));
 }
 
 void GB_set_highpass_filter_mode(GB_gameboy_t *gb, GB_highpass_mode_t mode)
