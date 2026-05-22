@@ -1617,7 +1617,8 @@ void GB_apu_set_sample_callback(GB_gameboy_t *gb, GB_sample_callback_t callback)
     gb->apu_output.sample_callback = callback;
 }
 
-/* Multichannel routing (RetroPlug): see apu.h and docs/multichannel-audio.md. */
+/* Multichannel routing (RetroPlug): copies the per-channel samples filled in by
+   render(). See GB_apu_get_channel_samples() in apu.h. */
 void GB_apu_get_channel_samples(GB_gameboy_t *gb, GB_sample_t out[GB_N_CHANNELS])
 {
     memcpy(out, gb->apu_output.channel_samples, sizeof(gb->apu_output.channel_samples));

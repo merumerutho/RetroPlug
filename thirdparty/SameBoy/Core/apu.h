@@ -168,8 +168,7 @@ typedef struct {
 
     /* Multichannel routing (RetroPlug): per-channel high-pass state and the last
        rendered, filtered per-channel samples. Additive change to upstream SameBoy
-       for the per-channel audio output feature - re-apply after SameBoy updates.
-       See docs/multichannel-audio.md. */
+       for the per-channel audio output feature - re-apply after SameBoy updates. */
     GB_double_sample_t channel_highpass_diff[GB_N_CHANNELS];
     GB_sample_t channel_samples[GB_N_CHANNELS];
 
