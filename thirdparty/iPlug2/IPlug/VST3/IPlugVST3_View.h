@@ -11,6 +11,7 @@
 #pragma once
 #include "pluginterfaces/gui/iplugviewcontentscalesupport.h"
 #include "pluginterfaces/base/keycodes.h"
+#include "base/source/fstring.h" // VST3 SDK 3.8: Steinberg::String no longer included transitively
 
 #include "IPlugStructs.h"
 

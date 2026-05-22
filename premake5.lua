@@ -196,8 +196,14 @@ dofile("scripts/configure.lua")
 
 group "Targets"
 	iplug2.project.app(retroplugProject)
-	iplug2.project.vst2(retroplugProject)
-	--iplug2.project.vst3(retroplugProject)
+	-- VST2 SDK is discontinued by Steinberg and cannot be redistributed - use VST3.
+	--iplug2.project.vst2(retroplugProject)
+	iplug2.project.vst3(retroplugProject)
+		-- iplug2's premake VST3 project only builds iPlug2's wrapper; link the
+		-- VST3 SDK itself (see scripts/vst3sdk.lua). configuration{} clears the
+		-- macOS filter left active by retroplugProject so this links everywhere.
+		configuration {}
+		links { "vst3sdk" }
 	--iplug2.project.wam(retroplugProject)
 
 if _OPTIONS["emscripten"] then
@@ -289,5 +295,6 @@ if _ACTION ~= "xcode4" then
 		if _OPTIONS["emscripten"] == nil then
 			dofile("scripts/gainput.lua")
 			dofile("scripts/simplefilewatcher.lua")
+			dofile("scripts/vst3sdk.lua")
 		end
 end
